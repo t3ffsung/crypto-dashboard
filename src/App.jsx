@@ -18,6 +18,7 @@ export default function App() {
       if (doc.exists()) setPortfolio(doc.data());
     });
 
+    // We are looking for "timestamp" here
     const q = query(collection(db, "trade_history"), orderBy("timestamp", "desc"), limit(20));
     const unsubTrades = onSnapshot(q, (snapshot) => {
       setTrades(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -48,10 +49,17 @@ export default function App() {
     if (!window.confirm(`EXECUTE ${action}: $${amount} of ${symbol}?`)) return;
     
     try {
-      await addDoc(collection(db, "pending_orders"), { symbol, action, amount_usdt: amount, timestamp: serverTimestamp() });
+      // THE FIX: We pass the exact 'price' so Python doesn't have to fetch it!
+      await addDoc(collection(db, "pending_orders"), { 
+        symbol, 
+        action, 
+        amount_usdt: amount, 
+        price: livePrices[symbol], 
+        timestamp: serverTimestamp() 
+      });
       setTradeAmounts({...tradeAmounts, [symbol]: ""});
       setOrderConfirm(symbol);
-      setTimeout(() => setOrderConfirm(null), 3000); // Show checkmark for 3 seconds
+      setTimeout(() => setOrderConfirm(null), 3000); 
     } catch (e) {
       alert("Database error.");
     }
@@ -62,7 +70,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 p-4 md:p-8 text-slate-200 font-sans selection:bg-emerald-500/30">
       
-      {/* HEADER */}
       <div className="mb-8 border-b border-slate-800 pb-6">
         <h1 className="text-3xl font-black tracking-tight text-white flex items-center gap-3">
           <Activity className="text-emerald-500 h-8 w-8" /> QUANTUM TERMINAL
@@ -73,7 +80,6 @@ export default function App() {
         </p>
       </div>
 
-      {/* METRICS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-slate-900 p-5 rounded-xl border border-slate-800 shadow-lg">
           <div className="flex items-center gap-3 mb-2"><TrendingUp className="h-5 w-5 text-emerald-500" /><h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Total Value</h2></div>
@@ -91,7 +97,6 @@ export default function App() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* COMMAND CENTER */}
         <div className="lg:col-span-1 space-y-6">
           <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-5">
             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2"><Crosshair className="h-4 w-4 text-rose-500" /> Execution Matrix</h3>
@@ -123,7 +128,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* PORTFOLIO & LEDGER */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-5">
             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2"><Wallet className="h-4 w-4 text-blue-500" /> Active Holdings</h3>
@@ -160,14 +164,18 @@ export default function App() {
                 <thead><tr className="border-b border-slate-800 text-slate-500 text-xs uppercase tracking-wider"><th className="pb-3 font-bold">Timestamp</th><th className="pb-3 font-bold">Asset</th><th className="pb-3 font-bold">Type</th><th className="pb-3 font-bold text-right">Execution Price</th></tr></thead>
                 <tbody className="text-sm">
                   {trades.length === 0 ? <tr><td colSpan="4" className="text-center py-8 text-slate-600">No executions recorded.</td></tr> : 
-                    trades.map((trade) => (
-                      <tr key={trade.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
-                        <td className="py-3 text-slate-400 font-mono text-xs">{new Date(trade.time).toLocaleTimeString()}</td>
-                        <td className="py-3 font-bold text-white">{trade.symbol}</td>
-                        <td className="py-3"><span className={`px-2 py-1 rounded text-[10px] font-black tracking-wider uppercase ${trade.action.includes('BUY') ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{trade.action}</span></td>
-                        <td className="py-3 text-right font-mono text-slate-300">${trade.price?.toFixed(2)}</td>
-                      </tr>
-                    ))
+                    trades.map((trade) => {
+                      // Safety format for time
+                      const tradeTime = trade.timestamp ? new Date(trade.timestamp).toLocaleTimeString() : "-";
+                      return (
+                        <tr key={trade.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+                          <td className="py-3 text-slate-400 font-mono text-xs">{tradeTime}</td>
+                          <td className="py-3 font-bold text-white">{trade.symbol}</td>
+                          <td className="py-3"><span className={`px-2 py-1 rounded text-[10px] font-black tracking-wider uppercase ${trade.action.includes('BUY') ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{trade.action}</span></td>
+                          <td className="py-3 text-right font-mono text-slate-300">${trade.price?.toFixed(2)}</td>
+                        </tr>
+                      )
+                    })
                   }
                 </tbody>
               </table>
