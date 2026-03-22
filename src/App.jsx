@@ -18,7 +18,7 @@ export default function App() {
   const [orderInput, setOrderInput] = useState({ usdt: '', qty: '' });
   const [orderConfirm, setOrderConfirm] = useState(false);
   
-  // NEW: State to toggle the Lifetime PnL card breakdown
+  // Floating Popover State
   const [showFees, setShowFees] = useState(false);
 
   useEffect(() => {
@@ -117,12 +117,16 @@ export default function App() {
   const totalProfitZoneUsd = profitableHoldings.reduce((sum, h) => sum + h.pnlUsd, 0);
   const totalDrawdownZoneUsd = losingHoldings.reduce((sum, h) => sum + h.pnlUsd, 0);
 
-  // --- NEW $30K MATH & BIFURCATION LOGIC ---
   const realTimeTotalValue = (portfolio.cash_balance || 0) + totalMarginUsed + totalLiveProfitUsd;
   const lifetimeRealizedPnL = realTimeTotalValue - 30000.0;
   const totalFeesPaid = portfolio.total_fees_paid || 0;
   const grossPnL = lifetimeRealizedPnL + totalFeesPaid;
   
+  // Percentages relative to the $30k starting bank
+  const grossPnLPercent = ((grossPnL / 30000) * 100).toFixed(2);
+  const feesPercent = ((totalFeesPaid / 30000) * 100).toFixed(2);
+  const netPnLPercent = ((lifetimeRealizedPnL / 30000) * 100).toFixed(2);
+
   const assetAccumulatedPnL = {};
   trades.forEach(trade => {
      if (!assetAccumulatedPnL[trade.symbol]) assetAccumulatedPnL[trade.symbol] = 0;
@@ -150,85 +154,106 @@ export default function App() {
   if (loading) return <div className="flex h-screen items-center justify-center bg-slate-950 text-white"><Activity className="h-10 w-10 animate-spin text-emerald-500" /></div>;
 
   return (
-    <div className="min-h-screen bg-slate-950 p-2 md:p-6 text-slate-200 font-sans">
-      <div className="mb-6 border-b border-slate-800 pb-4 flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="min-h-screen bg-slate-950 p-3 md:p-6 text-slate-200 font-sans">
+      
+      {/* HEADER */}
+      <div className="mb-4 md:mb-6 border-b border-slate-800 pb-4 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white flex items-center gap-3">
-            <Activity className="text-emerald-500 h-6 w-6 md:h-8 md:w-8" /> QUANTUM FUTURES
+          <h1 className="text-xl md:text-3xl font-black tracking-tight text-white flex items-center gap-2 md:gap-3">
+            <Activity className="text-emerald-500 h-5 w-5 md:h-8 md:w-8" /> QUANTUM FUTURES
           </h1>
-          <p className="text-slate-400 mt-2 text-sm font-medium flex items-center gap-2">
+          <p className="text-slate-400 mt-1 md:mt-2 text-xs md:text-sm font-medium flex items-center gap-2">
               <span className="flex h-2 w-2 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
               HFT Engine & Multi-Indicator AI Online
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
-        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg">
-          <div className="flex items-center gap-2 mb-1"><TrendingUp className="h-4 w-4 text-emerald-500" /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Value</h2></div>
-          <p className="text-lg md:text-xl font-black text-white">${realTimeTotalValue.toFixed(2)}</p>
+      {/* TOP METRICS */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 md:gap-3 mb-4 md:mb-6">
+        <div className="bg-slate-900 p-3 md:p-4 rounded-xl border border-slate-800 shadow-lg">
+          <div className="flex items-center gap-2 mb-1"><TrendingUp className="h-3 w-3 md:h-4 md:w-4 text-emerald-500" /><h2 className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Value</h2></div>
+          <p className="text-base md:text-xl font-black text-white">${realTimeTotalValue.toFixed(2)}</p>
         </div>
-        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg">
-          <div className="flex items-center gap-2 mb-1"><Wallet className="h-4 w-4 text-blue-500" /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Avail. Margin</h2></div>
-          <p className="text-lg md:text-xl font-black text-white">${portfolio.cash_balance?.toFixed(2) || '0.00'}</p>
+        <div className="bg-slate-900 p-3 md:p-4 rounded-xl border border-slate-800 shadow-lg">
+          <div className="flex items-center gap-2 mb-1"><Wallet className="h-3 w-3 md:h-4 md:w-4 text-blue-500" /><h2 className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Avail. Margin</h2></div>
+          <p className="text-base md:text-xl font-black text-white">${portfolio.cash_balance?.toFixed(2) || '0.00'}</p>
         </div>
-        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg hidden lg:block">
-          <div className="flex items-center gap-2 mb-1"><ShieldAlert className="h-4 w-4 text-amber-500" /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Positions</h2></div>
-          <p className="text-lg md:text-xl font-black text-white">{Object.keys(portfolio.positions || {}).length} <span className="text-slate-500 text-sm font-normal">/ 30</span></p>
+        <div className="bg-slate-900 p-3 md:p-4 rounded-xl border border-slate-800 shadow-lg hidden lg:block">
+          <div className="flex items-center gap-2 mb-1"><ShieldAlert className="h-3 w-3 md:h-4 md:w-4 text-amber-500" /><h2 className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Positions</h2></div>
+          <p className="text-base md:text-xl font-black text-white">{Object.keys(portfolio.positions || {}).length} <span className="text-slate-500 text-xs md:text-sm font-normal">/ 30</span></p>
         </div>
         
-        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg relative overflow-hidden">
+        <div className="bg-slate-900 p-3 md:p-4 rounded-xl border border-slate-800 shadow-lg relative overflow-hidden">
           <div className={`absolute top-0 right-0 w-1 h-full ${totalLiveProfitUsd >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
-          <div className="flex items-center gap-2 mb-1"><BarChart3 className={`h-4 w-4 ${totalLiveProfitUsd >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Live PnL</h2></div>
-          <p className={`text-lg md:text-xl font-black ${totalLiveProfitUsd >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+          <div className="flex items-center gap-2 mb-1"><BarChart3 className={`h-3 w-3 md:h-4 md:w-4 ${totalLiveProfitUsd >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} /><h2 className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Live PnL</h2></div>
+          <p className={`text-base md:text-xl font-black ${totalLiveProfitUsd >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
             {totalLiveProfitUsd >= 0 ? '+' : ''}${totalLiveProfitUsd.toFixed(2)}
           </p>
         </div>
 
-        {/* THE FIX: Interactive Bifurcated Lifetime PnL Card */}
-        <div 
-          className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg relative overflow-hidden cursor-pointer hover:bg-slate-800/50 transition-colors"
-          onClick={() => setShowFees(!showFees)}
-        >
-          <div className={`absolute top-0 right-0 w-1 h-full ${lifetimeRealizedPnL >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
-          <div className="flex justify-between items-start mb-1">
-             <div className="flex items-center gap-2"><Layers className={`h-4 w-4 ${lifetimeRealizedPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lifetime PnL</h2></div>
-             <span className="text-[8px] text-slate-500 uppercase bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">Tap to Expand</span>
-          </div>
-          
-          {!showFees ? (
-             <p className={`text-lg md:text-xl font-black ${lifetimeRealizedPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+        {/* THE FIX: Floating Absolute Pop-over for Lifetime PnL */}
+        <div className="relative">
+          <div 
+            className="bg-slate-900 p-3 md:p-4 rounded-xl border border-slate-800 shadow-lg h-full cursor-pointer hover:bg-slate-800/50 transition-colors"
+            onClick={() => setShowFees(!showFees)}
+          >
+            <div className={`absolute top-0 right-0 w-1 h-full rounded-r-xl ${lifetimeRealizedPnL >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
+            <div className="flex justify-between items-start mb-1">
+               <div className="flex items-center gap-2"><Layers className={`h-3 w-3 md:h-4 md:w-4 ${lifetimeRealizedPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} /><h2 className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lifetime PnL</h2></div>
+            </div>
+            <p className={`text-base md:text-xl font-black ${lifetimeRealizedPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                {lifetimeRealizedPnL >= 0 ? '+' : ''}${lifetimeRealizedPnL.toFixed(2)}
-             </p>
-          ) : (
-             <div className="flex flex-col mt-1.5 gap-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                <div className="flex justify-between items-center text-[11px]">
-                   <span className="text-slate-400 font-medium tracking-wide">Gross Return:</span>
-                   <span className={`font-mono font-bold ${grossPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{grossPnL >= 0 ? '+' : ''}${grossPnL.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center text-[11px]">
-                   <span className="text-slate-400 font-medium tracking-wide">Exchange Fees:</span>
-                   <span className="font-mono font-bold text-rose-500">-${totalFeesPaid.toFixed(2)}</span>
-                </div>
-                <div className="w-full h-px bg-slate-800 my-0.5"></div>
-                <div className="flex justify-between items-center text-xs">
-                   <span className="text-slate-200 font-bold tracking-wide">Net Profit:</span>
-                   <span className={`font-mono font-black ${lifetimeRealizedPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{lifetimeRealizedPnL >= 0 ? '+' : ''}${lifetimeRealizedPnL.toFixed(2)}</span>
-                </div>
-             </div>
+            </p>
+          </div>
+
+          {/* Floating Z-Index Dropdown */}
+          {showFees && (
+            <div className="absolute top-full right-0 md:left-0 mt-2 w-[280px] bg-slate-800/95 backdrop-blur-md border border-slate-600 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.7)] z-50 p-4 animate-in fade-in slide-in-from-top-2">
+               <div className="flex justify-between items-center mb-3">
+                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">PnL Breakdown</span>
+                 <button onClick={(e) => {e.stopPropagation(); setShowFees(false);}} className="text-slate-400 hover:text-white">&times;</button>
+               </div>
+               
+               <div className="flex justify-between items-center text-[11px] md:text-xs mb-2">
+                  <span className="text-slate-300 font-medium tracking-wide">Gross Return:</span>
+                  <div className="text-right">
+                     <span className={`font-mono font-bold block ${grossPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{grossPnL >= 0 ? '+' : ''}${grossPnL.toFixed(2)}</span>
+                     <span className={`text-[9px] block ${grossPnL >= 0 ? 'text-emerald-500/70' : 'text-rose-500/70'}`}>{grossPnL >= 0 ? '+' : ''}{grossPnLPercent}%</span>
+                  </div>
+               </div>
+               
+               <div className="flex justify-between items-center text-[11px] md:text-xs mb-3">
+                  <span className="text-slate-300 font-medium tracking-wide">Exchange Fees:</span>
+                  <div className="text-right">
+                     <span className="font-mono font-bold text-rose-500 block">-${totalFeesPaid.toFixed(2)}</span>
+                     <span className="text-[9px] text-rose-500/70 block">-{feesPercent}%</span>
+                  </div>
+               </div>
+               
+               <div className="w-full h-px bg-slate-600 my-2"></div>
+               
+               <div className="flex justify-between items-center text-sm md:text-base mt-2">
+                  <span className="text-white font-bold tracking-wide">Net Profit:</span>
+                  <div className="text-right">
+                     <span className={`font-mono font-black block ${lifetimeRealizedPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{lifetimeRealizedPnL >= 0 ? '+' : ''}${lifetimeRealizedPnL.toFixed(2)}</span>
+                     <span className={`text-[10px] font-bold block ${lifetimeRealizedPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{lifetimeRealizedPnL >= 0 ? '+' : ''}{netPnLPercent}%</span>
+                  </div>
+               </div>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Rest of the UI remains functionally the same, just rendering the smart padding */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
-        <div className="lg:col-span-1 bg-slate-900 rounded-xl border border-slate-800 flex flex-col h-[600px] shadow-lg overflow-hidden">
-           <div className="p-3 border-b border-slate-800">
+      {/* SCANNER & CHART WORKSPACE */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 md:gap-6 mb-4 md:mb-6">
+        <div className="lg:col-span-1 bg-slate-900 rounded-xl border border-slate-800 flex flex-col h-[300px] md:h-[450px] shadow-lg overflow-hidden">
+           <div className="p-2 md:p-3 border-b border-slate-800">
              <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800">
                 {['ALL', 'OG', 'VOLATILE'].map(filter => (
                   <button 
                     key={filter} onClick={() => setMarketFilter(filter)}
-                    className={`flex-1 py-1.5 rounded-md text-[10px] md:text-xs font-bold tracking-wider transition-all ${marketFilter === filter ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                    className={`flex-1 py-1.5 rounded-md text-[9px] md:text-xs font-bold tracking-wider transition-all ${marketFilter === filter ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
                   >{filter}</button>
                 ))}
              </div>
@@ -241,72 +266,55 @@ export default function App() {
                 const char = cleanName.charAt(0);
                 
                 return (
-                  <div key={symbol} onClick={() => setActiveSymbol(symbol)} className={`flex justify-between items-center p-3 rounded-lg cursor-pointer transition-all ${isActive ? 'bg-slate-800 border-l-2 border-emerald-500' : 'hover:bg-slate-800/50 border-l-2 border-transparent'}`}>
-                    <div className="flex items-center gap-3">
-                       <div className={`h-8 w-8 rounded-full ${getAvatarColor(char)} flex items-center justify-center text-white font-black shadow-inner`}>{char}</div>
-                       <div><p className={`font-black text-sm ${isActive ? 'text-white' : 'text-slate-300'}`}>{cleanName}</p><p className="text-[10px] text-slate-500 uppercase">USDT</p></div>
+                  <div key={symbol} onClick={() => setActiveSymbol(symbol)} className={`flex justify-between items-center p-2 md:p-3 rounded-lg cursor-pointer transition-all ${isActive ? 'bg-slate-800 border-l-2 border-emerald-500' : 'hover:bg-slate-800/50 border-l-2 border-transparent'}`}>
+                    <div className="flex items-center gap-2 md:gap-3">
+                       <div className={`h-6 w-6 md:h-8 md:w-8 rounded-full ${getAvatarColor(char)} flex items-center justify-center text-[10px] md:text-sm text-white font-black shadow-inner`}>{char}</div>
+                       <div><p className={`font-black text-xs md:text-sm ${isActive ? 'text-white' : 'text-slate-300'}`}>{cleanName}</p><p className="text-[8px] md:text-[10px] text-slate-500 uppercase">USDT</p></div>
                     </div>
-                    <p className={`font-mono font-medium text-sm ${isActive ? 'text-emerald-400' : 'text-slate-400'}`}>${livePrices[symbol] > 10 ? livePrices[symbol]?.toFixed(2) : livePrices[symbol]?.toFixed(4)}</p>
+                    <p className={`font-mono font-medium text-xs md:text-sm ${isActive ? 'text-emerald-400' : 'text-slate-400'}`}>${livePrices[symbol] > 10 ? livePrices[symbol]?.toFixed(2) : livePrices[symbol]?.toFixed(4)}</p>
                   </div>
                 )
               })}
            </div>
         </div>
 
-        <div className="lg:col-span-3 flex flex-col gap-6">
-           <div className="bg-slate-900 rounded-xl border border-slate-800 p-1 h-[450px] shadow-lg">
+        <div className="lg:col-span-3 flex flex-col gap-4 md:gap-6">
+           <div className="bg-slate-900 rounded-xl border border-slate-800 p-1 h-[300px] md:h-[450px] shadow-lg">
              <div className="w-full h-full rounded-lg overflow-hidden">
                 <iframe src={`https://s.tradingview.com/widgetembed/?symbol=BINANCE:${activeSymbol}&interval=15&hidesidetoolbar=1&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=[]&theme=dark&style=1&timezone=Etc%2FUTC`} width="100%" height="100%" frameBorder="0" allowFullScreen></iframe>
              </div>
            </div>
-
-           <div className="bg-slate-900 rounded-xl border border-slate-800 p-5 shadow-lg relative">
-              <h3 className="text-sm font-black text-white mb-4 flex items-center gap-2"><Crosshair className="h-5 w-5 text-emerald-500" /> ORDER ENTRY: {activeSymbol.replace('USDT', '')}</h3>
-              <div className="flex flex-col md:flex-row gap-4">
-                 <div className="flex-1 flex gap-4">
-                    <div className="flex-1"><label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Quantity ({activeSymbol.replace('USDT', '')})</label><input type="number" placeholder="0.00" value={orderInput.qty} onChange={(e) => handleOrderInputChange('qty', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 font-mono" /></div>
-                    <div className="flex-1"><label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Margin (USDT)</label><input type="number" placeholder="$0.00" value={orderInput.usdt} onChange={(e) => handleOrderInputChange('usdt', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 font-mono" /></div>
-                 </div>
-                 <div className="flex-1 flex items-end gap-2">
-                    {orderConfirm ? (
-                       <div className="flex-1 h-[42px] bg-emerald-500/20 text-emerald-400 rounded-lg flex items-center justify-center font-bold text-sm gap-2 border border-emerald-500/30"><CheckCircle2 className="h-4 w-4" /> Order Sent</div>
-                    ) : (
-                      <>
-                        <button onClick={() => executeTrade("BUY")} className="flex-1 h-[42px] rounded-lg text-sm font-black tracking-wider bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.3)]">LONG</button>
-                        <button onClick={() => executeTrade("SELL")} className="flex-1 h-[42px] rounded-lg text-sm font-black tracking-wider bg-rose-500 text-white hover:bg-rose-400 transition-colors shadow-[0_0_15px_rgba(244,63,94,0.3)]">SHORT</button>
-                        <button onClick={() => executeTrade("CLOSE")} disabled={!isActiveOwned} className={`px-4 h-[42px] rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${!isActiveOwned ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-slate-800 text-amber-500 border border-amber-500/50 hover:bg-amber-600 hover:text-white'}`}>Liquidate</button>
-                      </>
-                    )}
-                 </div>
-              </div>
-           </div>
         </div>
       </div>
 
-      <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-5 mb-6">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Wallet className="h-4 w-4 text-blue-500" /> Active Holdings Split-Matrix</h3>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
-          <div className="flex flex-col border border-emerald-500/20 rounded-lg bg-slate-950/50 overflow-hidden">
-            <div className="bg-emerald-500/10 p-3 flex justify-between items-center px-4 text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-emerald-500/20">
-               <span className="flex items-center gap-2"><TrendingUp className="h-3 w-3" /> In Profit ({profitableHoldings.length})</span>
-               <span className="text-xs bg-emerald-500/20 px-2 py-1 rounded shadow-sm">+${totalProfitZoneUsd.toFixed(2)}</span>
+      {/* FULL WIDTH SPLIT MATRIX FOR ACTIVE HOLDINGS (Mobile Height Fixes) */}
+      <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-3 md:p-5 mb-4 md:mb-6">
+        <h3 className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 md:mb-4 flex items-center gap-2"><Wallet className="h-3 w-3 md:h-4 md:w-4 text-blue-500" /> Active Holdings Split-Matrix</h3>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+          
+          <div className="flex flex-col border border-emerald-500/20 rounded-lg bg-slate-950/50 overflow-hidden h-[250px] md:h-[350px]">
+            <div className="bg-emerald-500/10 p-2 md:p-3 flex justify-between items-center px-3 md:px-4 text-[9px] md:text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-emerald-500/20">
+               <span className="flex items-center gap-1 md:gap-2"><TrendingUp className="h-3 w-3" /> In Profit ({profitableHoldings.length})</span>
+               <span className="text-[9px] md:text-xs bg-emerald-500/20 px-1.5 md:px-2 py-0.5 md:py-1 rounded shadow-sm">+${totalProfitZoneUsd.toFixed(2)}</span>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar pr-2">
-               {profitableHoldings.length === 0 ? <p className="text-center text-slate-600 text-xs italic mt-10">No positions in profit.</p> : 
+            
+            <div className="flex-1 overflow-y-auto p-2 md:p-3 space-y-2 md:space-y-3 custom-scrollbar pr-1 md:pr-2">
+               {profitableHoldings.length === 0 ? <p className="text-center text-slate-600 text-[10px] md:text-xs italic mt-10">No positions in profit.</p> : 
                  profitableHoldings.map((h) => (
-                   <div key={h.symbol} onClick={() => setActiveSymbol(h.lookupSymbol)} className="p-3 bg-slate-900 rounded-lg border border-slate-800 flex justify-between items-center cursor-pointer hover:border-emerald-500/50 transition-all hover:shadow-[0_0_10px_rgba(16,185,129,0.1)] group">
-                     <div className="pl-2">
-                       <p className="font-black text-white flex items-center gap-2">
-                          {h.symbol.replace('/USDT', '')} <span className={`text-[8px] px-1.5 py-0.5 rounded ${h.isLong ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{h.isLong ? 'LONG' : 'SHORT'}</span>
+                   <div key={h.symbol} onClick={() => setActiveSymbol(h.lookupSymbol)} className="p-2 md:p-3 bg-slate-900 rounded-lg border border-slate-800 flex justify-between items-center cursor-pointer hover:border-emerald-500/50 transition-all group">
+                     <div className="pl-1 md:pl-2">
+                       <p className="font-black text-xs md:text-sm text-white flex items-center gap-1.5 md:gap-2">
+                          {h.symbol.replace('/USDT', '')} <span className={`text-[7px] md:text-[8px] px-1 md:px-1.5 py-0.5 rounded ${h.isLong ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{h.isLong ? 'LONG' : 'SHORT'}</span>
                        </p>
-                       <p className="text-[11px] text-slate-500 font-mono mt-0.5">In: ${h.data.entry_price?.toFixed(4)}</p>
+                       <p className="text-[9px] md:text-[11px] text-slate-500 font-mono mt-0.5">In: ${h.data.entry_price?.toFixed(4)}</p>
                      </div>
                      <div className="text-right">
-                        <div className="flex items-center justify-end gap-2 mb-1">
-                           <p className="text-[10px] text-slate-500 font-mono group-hover:text-slate-300">Qty: {h.data.amount?.toFixed(4)}</p>
-                           <span className="inline-block px-2 py-0.5 rounded text-[10px] font-black bg-emerald-500/10 text-emerald-400">+{h.pnlPercentage.toFixed(2)}%</span>
+                        <div className="flex items-center justify-end gap-1.5 md:gap-2 mb-1">
+                           <p className="text-[8px] md:text-[10px] text-slate-500 font-mono group-hover:text-slate-300">Qty: {h.data.amount?.toFixed(4)}</p>
+                           <span className="inline-block px-1.5 md:px-2 py-0.5 rounded text-[8px] md:text-[10px] font-black bg-emerald-500/10 text-emerald-400">+{h.pnlPercentage.toFixed(2)}%</span>
                         </div>
-                        <p className="text-xs font-mono font-black text-emerald-500">+${h.pnlUsd.toFixed(2)}</p>
+                        <p className="text-[10px] md:text-xs font-mono font-black text-emerald-500">+${h.pnlUsd.toFixed(2)}</p>
                      </div>
                    </div>
                  ))
@@ -314,126 +322,33 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex flex-col border border-rose-500/20 rounded-lg bg-slate-950/50 overflow-hidden">
-            <div className="bg-rose-500/10 p-3 flex justify-between items-center px-4 text-[10px] font-bold text-rose-500 uppercase tracking-widest border-b border-rose-500/20">
-               <span className="flex items-center gap-2"><TrendingDown className="h-3 w-3" /> In Drawdown ({losingHoldings.length})</span>
-               <span className="text-xs bg-rose-500/20 px-2 py-1 rounded shadow-sm">-${Math.abs(totalDrawdownZoneUsd).toFixed(2)}</span>
+          <div className="flex flex-col border border-rose-500/20 rounded-lg bg-slate-950/50 overflow-hidden h-[250px] md:h-[350px]">
+            <div className="bg-rose-500/10 p-2 md:p-3 flex justify-between items-center px-3 md:px-4 text-[9px] md:text-[10px] font-bold text-rose-500 uppercase tracking-widest border-b border-rose-500/20">
+               <span className="flex items-center gap-1 md:gap-2"><TrendingDown className="h-3 w-3" /> In Drawdown ({losingHoldings.length})</span>
+               <span className="text-[9px] md:text-xs bg-rose-500/20 px-1.5 md:px-2 py-0.5 md:py-1 rounded shadow-sm">-${Math.abs(totalDrawdownZoneUsd).toFixed(2)}</span>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar pr-2">
-               {losingHoldings.length === 0 ? <p className="text-center text-slate-600 text-xs italic mt-10">No positions in drawdown.</p> : 
+            
+            <div className="flex-1 overflow-y-auto p-2 md:p-3 space-y-2 md:space-y-3 custom-scrollbar pr-1 md:pr-2">
+               {losingHoldings.length === 0 ? <p className="text-center text-slate-600 text-[10px] md:text-xs italic mt-10">No positions in drawdown.</p> : 
                  losingHoldings.map((h) => (
-                   <div key={h.symbol} onClick={() => setActiveSymbol(h.lookupSymbol)} className="p-3 bg-slate-900 rounded-lg border border-slate-800 flex justify-between items-center cursor-pointer hover:border-rose-500/50 transition-all hover:shadow-[0_0_10px_rgba(244,63,94,0.1)] group">
-                     <div className="pl-2">
-                       <p className="font-black text-white flex items-center gap-2">
-                          {h.symbol.replace('/USDT', '')} <span className={`text-[8px] px-1.5 py-0.5 rounded ${h.isLong ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{h.isLong ? 'LONG' : 'SHORT'}</span>
+                   <div key={h.symbol} onClick={() => setActiveSymbol(h.lookupSymbol)} className="p-2 md:p-3 bg-slate-900 rounded-lg border border-slate-800 flex justify-between items-center cursor-pointer hover:border-rose-500/50 transition-all group">
+                     <div className="pl-1 md:pl-2">
+                       <p className="font-black text-xs md:text-sm text-white flex items-center gap-1.5 md:gap-2">
+                          {h.symbol.replace('/USDT', '')} <span className={`text-[7px] md:text-[8px] px-1 md:px-1.5 py-0.5 rounded ${h.isLong ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{h.isLong ? 'LONG' : 'SHORT'}</span>
                        </p>
-                       <p className="text-[11px] text-slate-500 font-mono mt-0.5">In: ${h.data.entry_price?.toFixed(4)}</p>
+                       <p className="text-[9px] md:text-[11px] text-slate-500 font-mono mt-0.5">In: ${h.data.entry_price?.toFixed(4)}</p>
                      </div>
                      <div className="text-right">
-                        <div className="flex items-center justify-end gap-2 mb-1">
-                           <p className="text-[10px] text-slate-500 font-mono group-hover:text-slate-300">Qty: {h.data.amount?.toFixed(4)}</p>
-                           <span className="inline-block px-2 py-0.5 rounded text-[10px] font-black bg-rose-500/10 text-rose-400">{h.pnlPercentage.toFixed(2)}%</span>
+                        <div className="flex items-center justify-end gap-1.5 md:gap-2 mb-1">
+                           <p className="text-[8px] md:text-[10px] text-slate-500 font-mono group-hover:text-slate-300">Qty: {h.data.amount?.toFixed(4)}</p>
+                           <span className="inline-block px-1.5 md:px-2 py-0.5 rounded text-[8px] md:text-[10px] font-black bg-rose-500/10 text-rose-400">{h.pnlPercentage.toFixed(2)}%</span>
                         </div>
-                        <p className="text-xs font-mono font-black text-rose-500">-${Math.abs(h.pnlUsd).toFixed(2)}</p>
+                        <p className="text-[10px] md:text-xs font-mono font-black text-rose-500">-${Math.abs(h.pnlUsd).toFixed(2)}</p>
                      </div>
                    </div>
                  ))
                }
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="lg:col-span-1 bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-5 overflow-hidden">
-          <div className="flex justify-between items-center mb-4">
-             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Coins className="h-4 w-4 text-purple-500" /> Accumulated PnL</h3>
-             <div className="bg-slate-950 border border-slate-800 px-2 py-1 rounded text-[10px] font-bold text-slate-300 flex items-center gap-1.5">
-                <Target className="h-3 w-3 text-emerald-500" /> Win Rate: {winRate}%
-             </div>
-          </div>
-          <div className="overflow-y-auto overflow-x-auto max-h-[400px] custom-scrollbar pr-2">
-            <table className="w-full text-left">
-              <thead className="sticky top-0 bg-slate-900/90 backdrop-blur-md z-10">
-                <tr className="border-b border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider">
-                  <th className="pb-3 font-bold">Asset</th>
-                  <th className="pb-3 pr-4 font-bold text-right">Lifetime Profit/Loss</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm">
-                {Object.keys(assetAccumulatedPnL).length === 0 ? <tr><td colSpan="2" className="text-center py-8 text-slate-600 text-xs">No closed trades yet.</td></tr> : 
-                  Object.entries(assetAccumulatedPnL)
-                    .sort(([,a], [,b]) => b - a)
-                    .map(([symbol, profit]) => (
-                    <tr key={symbol} className="border-b border-slate-800/50 hover:bg-slate-800/80 transition-colors">
-                      <td className="py-3 font-bold text-white flex items-center gap-3">
-                        <div className={`h-5 w-5 rounded-full ${getAvatarColor(symbol.charAt(0))} flex items-center justify-center text-[10px] text-white font-black`}>{symbol.charAt(0)}</div>
-                        {symbol.replace('/USDT', '')} <span className="text-[10px] text-slate-500 font-normal">USDT</span>
-                      </td>
-                      <td className={`py-3 pr-4 text-right font-mono font-bold ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
-                      </td>
-                    </tr>
-                  ))
-                }
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="lg:col-span-2 bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-5 overflow-hidden">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><ArrowRightLeft className="h-4 w-4 text-emerald-500" /> Immutable Ledger</h3>
-            <button onClick={exportToCSV} className="flex items-center gap-2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded hover:bg-emerald-500/20 transition-colors border border-emerald-500/20">
-              <Download className="h-3 w-3" /> EXPORT CSV
-            </button>
-          </div>
-          <div className="overflow-y-auto overflow-x-auto max-h-[400px] custom-scrollbar border border-slate-800 rounded-lg">
-            <table className="w-full text-left border-collapse">
-              <thead className="sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10">
-                <tr className="border-b border-slate-700 text-slate-400 text-[10px] uppercase tracking-widest">
-                  <th className="py-3 px-4 font-bold">Time</th>
-                  <th className="py-3 px-4 font-bold">Asset</th>
-                  <th className="py-3 px-4 font-bold text-center">Type</th>
-                  <th className="py-3 px-4 font-bold text-right">Qty</th>
-                  <th className="py-3 px-4 font-bold text-right">Price</th>
-                  <th className="py-3 px-4 font-bold text-right">Realized PnL</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm font-medium">
-                {trades.length === 0 ? <tr><td colSpan="6" className="text-center py-10 text-slate-500 text-xs italic">Awaiting execution data...</td></tr> : 
-                  trades.map((trade) => {
-                    const tradeTime = trade.timestamp ? new Date(trade.timestamp).toLocaleString([], {month:'short', day:'numeric', hour: '2-digit', minute:'2-digit'}) : "-";
-                    const pnl = trade.profit || 0;
-                    const isClose = trade.action.includes('CLOSE');
-                    
-                    let actionColor = 'bg-slate-500/20 text-slate-400';
-                    if (trade.action.includes('LONG')) actionColor = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20';
-                    if (trade.action.includes('SHORT')) actionColor = 'bg-rose-500/20 text-rose-400 border border-rose-500/20';
-                    if (isClose) actionColor = 'bg-amber-500/20 text-amber-400 border border-amber-500/20';
-
-                    return (
-                      <tr key={trade.id} className="border-b border-slate-800/50 hover:bg-slate-800/80 transition-colors group">
-                        <td className="py-3 px-4 text-slate-500 font-mono text-[11px] whitespace-nowrap group-hover:text-slate-300 transition-colors">{tradeTime}</td>
-                        <td className="py-3 px-4 font-bold text-white whitespace-nowrap">
-                           {trade.symbol.replace('/USDT', '')} <span className="text-[10px] text-slate-600 font-normal">USDT</span>
-                        </td>
-                        <td className="py-3 px-4 whitespace-nowrap text-center">
-                           <span className={`px-2 py-1 rounded text-[9px] font-black tracking-widest uppercase shadow-sm ${actionColor}`}>
-                              {trade.action}
-                           </span>
-                        </td>
-                        <td className="py-3 px-4 text-right font-mono text-slate-300 whitespace-nowrap text-xs">{trade.amount?.toFixed(4)}</td>
-                        <td className="py-3 px-4 text-right font-mono text-slate-300 whitespace-nowrap text-xs">${trade.price?.toFixed(4)}</td>
-                        <td className={`py-3 px-4 text-right font-mono font-bold whitespace-nowrap text-xs ${isClose ? (pnl >= 0 ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-600'}`}>
-                           {isClose ? (pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`) : '---'}
-                        </td>
-                      </tr>
-                    )
-                  })
-                }
-              </tbody>
-            </table>
           </div>
         </div>
       </div>
