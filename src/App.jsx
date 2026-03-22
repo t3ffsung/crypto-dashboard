@@ -1,25 +1,29 @@
 import { useState, useEffect } from 'react';
 import { db } from './firebase';
 import { doc, collection, onSnapshot, query, orderBy, limit, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Activity, ArrowRightLeft, ShieldAlert, Crosshair, TrendingUp, Wallet, CheckCircle2 } from 'lucide-react';
+import { Activity, ArrowRightLeft, ShieldAlert, Crosshair, TrendingUp, Wallet, CheckCircle2, BarChart3, PieChart as PieChartIcon, Download, Layers, LineChart, Coins, Target, TrendingDown } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
-const TOP_COINS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "LINKUSDT", "PEPEUSDT"];
+const OG_COINS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "DOTUSDT", "MATICUSDT", "LTCUSDT", "LINKUSDT", "BCHUSDT", "TRXUSDT", "XLMUSDT", "ATOMUSDT", "XMRUSDT", "ETCUSDT", "ALGOUSDT", "VETUSDT", "FILUSDT"];
+const VOLATILE_COINS = ["PEPEUSDT", "WIFUSDT", "FLOKIUSDT", "BONKUSDT", "SHIBUSDT", "AVAXUSDT", "NEARUSDT", "RNDRUSDT", "FETUSDT", "INJUSDT", "OPUSDT", "ARBUSDT", "SUIUSDT", "APTUSDT", "SEIUSDT", "TIAUSDT", "JUPUSDT", "ORDIUSDT", "RUNEUSDT", "BOMEUSDT"];
 
 export default function App() {
   const [portfolio, setPortfolio] = useState({ cash_balance: 0, total_value: 0, positions: {} });
   const [trades, setTrades] = useState([]);
   const [livePrices, setLivePrices] = useState({});
   const [loading, setLoading] = useState(true);
-  const [tradeAmounts, setTradeAmounts] = useState({});
-  const [orderConfirm, setOrderConfirm] = useState(null);
+  
+  const [marketFilter, setMarketFilter] = useState('ALL');
+  const [activeSymbol, setActiveSymbol] = useState("BTCUSDT");
+  const [orderInput, setOrderInput] = useState({ usdt: '', qty: '' });
+  const [orderConfirm, setOrderConfirm] = useState(false);
 
   useEffect(() => {
     const unsubPortfolio = onSnapshot(doc(db, "bot_stats", "live_portfolio"), (doc) => {
       if (doc.exists()) setPortfolio(doc.data());
     });
 
-    // We are looking for "timestamp" here
-    const q = query(collection(db, "trade_history"), orderBy("timestamp", "desc"), limit(20));
+    const q = query(collection(db, "trade_history"), orderBy("timestamp", "desc"), limit(200));
     const unsubTrades = onSnapshot(q, (snapshot) => {
       setTrades(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
@@ -27,14 +31,13 @@ export default function App() {
 
     const fetchPrices = async () => {
       try {
-        const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbols=${JSON.stringify(TOP_COINS)}`);
+        const allCoins = [...OG_COINS, ...VOLATILE_COINS];
+        const res = await fetch(`https://api.binance.com/api/v3/ticker/price?symbols=${JSON.stringify(allCoins)}`);
         const data = await res.json();
         const priceMap = {};
-        data.forEach(item => priceMap[item.symbol.replace("USDT", "/USDT")] = parseFloat(item.price));
+        data.forEach(item => priceMap[item.symbol] = parseFloat(item.price));
         setLivePrices(priceMap);
-      } catch (e) {
-        console.error(e);
-      }
+      } catch (e) { console.error(e); }
     };
     
     fetchPrices();
@@ -42,147 +45,371 @@ export default function App() {
     return () => { unsubPortfolio(); unsubTrades(); clearInterval(priceInterval); };
   }, []);
 
-  const executeManualTrade = async (symbol, action) => {
-    const amount = parseFloat(tradeAmounts[symbol]);
-    if (!amount || amount <= 0) return alert("Enter a valid USDT amount!");
-    if (action === "BUY" && amount > portfolio.cash_balance) return alert("Insufficient cash!");
-    if (!window.confirm(`EXECUTE ${action}: $${amount} of ${symbol}?`)) return;
+  const handleOrderInputChange = (type, value) => {
+    const price = livePrices[activeSymbol];
+    if (!price || value === '') {
+      setOrderInput({ usdt: '', qty: '' });
+      return;
+    }
+    if (type === 'usdt') setOrderInput({ usdt: value, qty: (parseFloat(value) / price).toFixed(6) });
+    else setOrderInput({ qty: value, usdt: (parseFloat(value) * price).toFixed(2) });
+  };
+
+  const executeTrade = async (action, overrideAmountCoin = null) => {
+    let amountUsdt = parseFloat(orderInput.usdt || 0);
+    let amountCoin = overrideAmountCoin !== null ? overrideAmountCoin : parseFloat(orderInput.qty || 0);
+    
+    if (action !== "CLOSE") {
+        if (amountUsdt <= 0) return alert("Enter a valid amount!");
+        if (amountUsdt > portfolio.cash_balance) return alert("Insufficient margin!");
+    }
+    
+    if (!window.confirm(`EXECUTE ${action}:\nAmount: ${amountCoin.toFixed(4)} ${activeSymbol.replace('USDT','')}\nEst. Margin: $${amountUsdt.toFixed(2)}`)) return;
     
     try {
-      // THE FIX: We pass the exact 'price' so Python doesn't have to fetch it!
       await addDoc(collection(db, "pending_orders"), { 
-        symbol, 
-        action, 
-        amount_usdt: amount, 
-        price: livePrices[symbol], 
-        timestamp: serverTimestamp() 
+          symbol: activeSymbol.replace('USDT', '/USDT'), 
+          action, amount_usdt: amountUsdt, amount_coin: amountCoin, price: livePrices[activeSymbol], timestamp: serverTimestamp() 
       });
-      setTradeAmounts({...tradeAmounts, [symbol]: ""});
-      setOrderConfirm(symbol);
-      setTimeout(() => setOrderConfirm(null), 3000); 
-    } catch (e) {
-      alert("Database error.");
-    }
+      setOrderInput({ usdt: '', qty: '' });
+      setOrderConfirm(true);
+      setTimeout(() => setOrderConfirm(false), 2000); 
+    } catch (e) { alert("Database error."); }
   };
+
+  const exportToCSV = () => {
+    const headers = "Time,Symbol,Action,Qty,Price,Profit\n";
+    const rows = trades.map(t => `${t.timestamp || ''},${t.symbol},${t.action},${t.amount},${t.price},${t.profit || 0}`).join("\n");
+    const blob = new Blob([headers + rows], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Terminal_Ledger_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+  };
+
+  let totalLiveProfitUsd = 0;
+  let totalMarginUsed = 0;
+  
+  const activeHoldingsData = Object.entries(portfolio.positions || {}).map(([symbol, data]) => {
+    const lookupSymbol = symbol.replace('/', '');
+    const currentPrice = livePrices[lookupSymbol];
+    let margin = 0, value = 0, pnlPercentage = 0, pnlUsd = 0, isLong = true;
+
+    if (currentPrice) {
+        margin = data.amount * data.entry_price;
+        value = data.amount * currentPrice;
+        totalMarginUsed += margin;
+        isLong = data.type === 'LONG' || !data.type;
+        pnlUsd = isLong ? (value - margin) : (margin - value);
+        pnlPercentage = isLong ? ((currentPrice - data.entry_price) / data.entry_price * 100) : ((data.entry_price - currentPrice) / data.entry_price * 100);
+        totalLiveProfitUsd += pnlUsd;
+    }
+    return { symbol, lookupSymbol, data, currentPrice, isLong, pnlPercentage, pnlUsd };
+  });
+
+  const profitableHoldings = activeHoldingsData.filter(h => h.pnlUsd >= 0).sort((a, b) => b.pnlUsd - a.pnlUsd);
+  const losingHoldings = activeHoldingsData.filter(h => h.pnlUsd < 0).sort((a, b) => a.pnlUsd - b.pnlUsd);
+  
+  // --- NEW AGGREGATE CALCULATIONS ---
+  const totalProfitZoneUsd = profitableHoldings.reduce((sum, h) => sum + h.pnlUsd, 0);
+  const totalDrawdownZoneUsd = losingHoldings.reduce((sum, h) => sum + h.pnlUsd, 0);
+
+  const realTimeTotalValue = (portfolio.cash_balance || 0) + totalMarginUsed + totalLiveProfitUsd;
+  const lifetimeRealizedPnL = realTimeTotalValue - 3000.0;
+  
+  const assetAccumulatedPnL = {};
+  trades.forEach(trade => {
+     if (!assetAccumulatedPnL[trade.symbol]) assetAccumulatedPnL[trade.symbol] = 0;
+     if (trade.profit) assetAccumulatedPnL[trade.symbol] += trade.profit;
+  });
+
+  const closedTrades = trades.filter(t => t.action.includes('CLOSE'));
+  const winningTrades = closedTrades.filter(t => (t.profit || 0) > 0);
+  const winRate = closedTrades.length > 0 ? ((winningTrades.length / closedTrades.length) * 100).toFixed(1) : 0.0;
+
+  const displayedCoins = Object.keys(livePrices).filter(symbol => {
+    if (marketFilter === 'ALL') return true;
+    if (marketFilter === 'OG') return OG_COINS.includes(symbol);
+    if (marketFilter === 'VOLATILE') return VOLATILE_COINS.includes(symbol);
+    return true;
+  });
+
+  const getAvatarColor = (char) => {
+    const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500'];
+    return colors[char.charCodeAt(0) % colors.length];
+  };
+
+  const isActiveOwned = Object.keys(portfolio.positions || {}).includes(activeSymbol.replace('USDT', '/USDT'));
 
   if (loading) return <div className="flex h-screen items-center justify-center bg-slate-950 text-white"><Activity className="h-10 w-10 animate-spin text-emerald-500" /></div>;
 
   return (
-    <div className="min-h-screen bg-slate-950 p-4 md:p-8 text-slate-200 font-sans selection:bg-emerald-500/30">
-      
-      <div className="mb-8 border-b border-slate-800 pb-6">
-        <h1 className="text-3xl font-black tracking-tight text-white flex items-center gap-3">
-          <Activity className="text-emerald-500 h-8 w-8" /> QUANTUM TERMINAL
-        </h1>
-        <p className="text-slate-400 mt-2 text-sm font-medium flex items-center gap-2">
-            <span className="flex h-2 w-2 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
-            Algo Engine & Manual Override Online
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-slate-900 p-5 rounded-xl border border-slate-800 shadow-lg">
-          <div className="flex items-center gap-3 mb-2"><TrendingUp className="h-5 w-5 text-emerald-500" /><h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Total Value</h2></div>
-          <p className="text-3xl font-black text-white">${portfolio.total_value?.toFixed(2) || '0.00'}</p>
-        </div>
-        <div className="bg-slate-900 p-5 rounded-xl border border-slate-800 shadow-lg">
-          <div className="flex items-center gap-3 mb-2"><Wallet className="h-5 w-5 text-blue-500" /><h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Purchasing Power</h2></div>
-          <p className="text-3xl font-black text-white">${portfolio.cash_balance?.toFixed(2) || '0.00'}</p>
-        </div>
-        <div className="bg-slate-900 p-5 rounded-xl border border-slate-800 shadow-lg">
-          <div className="flex items-center gap-3 mb-2"><ShieldAlert className="h-5 w-5 text-amber-500" /><h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Open Positions</h2></div>
-          <p className="text-3xl font-black text-white">{Object.keys(portfolio.positions || {}).length}</p>
+    <div className="min-h-screen bg-slate-950 p-2 md:p-6 text-slate-200 font-sans">
+      <div className="mb-6 border-b border-slate-800 pb-4 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white flex items-center gap-3">
+            <Activity className="text-emerald-500 h-6 w-6 md:h-8 md:w-8" /> QUANTUM FUTURES
+          </h1>
+          <p className="text-slate-400 mt-2 text-sm font-medium flex items-center gap-2">
+              <span className="flex h-2 w-2 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
+              HFT Engine & Multi-Indicator AI Online
+          </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-5">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2"><Crosshair className="h-4 w-4 text-rose-500" /> Execution Matrix</h3>
-            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-              {Object.entries(livePrices).map(([symbol, price]) => {
-                const isOwned = Object.keys(portfolio.positions || {}).includes(symbol);
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg">
+          <div className="flex items-center gap-2 mb-1"><TrendingUp className="h-4 w-4 text-emerald-500" /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Value</h2></div>
+          <p className="text-lg md:text-xl font-black text-white">${realTimeTotalValue.toFixed(2)}</p>
+        </div>
+        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg">
+          <div className="flex items-center gap-2 mb-1"><Wallet className="h-4 w-4 text-blue-500" /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Avail. Margin</h2></div>
+          <p className="text-lg md:text-xl font-black text-white">${portfolio.cash_balance?.toFixed(2) || '0.00'}</p>
+        </div>
+        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg hidden lg:block">
+          <div className="flex items-center gap-2 mb-1"><ShieldAlert className="h-4 w-4 text-amber-500" /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Positions</h2></div>
+          <p className="text-lg md:text-xl font-black text-white">{Object.keys(portfolio.positions || {}).length} <span className="text-slate-500 text-sm font-normal">/ 30</span></p>
+        </div>
+        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg relative overflow-hidden">
+          <div className={`absolute top-0 right-0 w-1 h-full ${totalLiveProfitUsd >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
+          <div className="flex items-center gap-2 mb-1"><BarChart3 className={`h-4 w-4 ${totalLiveProfitUsd >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Live PnL</h2></div>
+          <p className={`text-lg md:text-xl font-black ${totalLiveProfitUsd >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {totalLiveProfitUsd >= 0 ? '+' : ''}${totalLiveProfitUsd.toFixed(2)}
+          </p>
+        </div>
+        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg relative overflow-hidden">
+          <div className={`absolute top-0 right-0 w-1 h-full ${lifetimeRealizedPnL >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
+          <div className="flex items-center gap-2 mb-1"><Layers className={`h-4 w-4 ${lifetimeRealizedPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lifetime PnL</h2></div>
+          <p className={`text-lg md:text-xl font-black ${lifetimeRealizedPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {lifetimeRealizedPnL >= 0 ? '+' : ''}${lifetimeRealizedPnL.toFixed(2)}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
+        <div className="lg:col-span-1 bg-slate-900 rounded-xl border border-slate-800 flex flex-col h-[600px] shadow-lg overflow-hidden">
+           <div className="p-3 border-b border-slate-800">
+             <div className="flex bg-slate-950 rounded-lg p-1 border border-slate-800">
+                {['ALL', 'OG', 'VOLATILE'].map(filter => (
+                  <button 
+                    key={filter} onClick={() => setMarketFilter(filter)}
+                    className={`flex-1 py-1.5 rounded-md text-[10px] md:text-xs font-bold tracking-wider transition-all ${marketFilter === filter ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                  >{filter}</button>
+                ))}
+             </div>
+           </div>
+
+           <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+              {displayedCoins.map((symbol) => {
+                const cleanName = symbol.replace('USDT', '');
+                const isActive = activeSymbol === symbol;
+                const char = cleanName.charAt(0);
+                
                 return (
-                  <div key={symbol} className="p-4 bg-slate-950 rounded-lg border border-slate-800 hover:border-slate-700 transition-colors">
-                    <div className="flex justify-between items-end mb-3">
-                      <p className="font-black text-lg text-white">{symbol.replace('/USDT', '')}</p>
-                      <p className="font-mono text-emerald-400 font-medium">${price > 10 ? price.toFixed(2) : price.toFixed(5)}</p>
+                  <div key={symbol} onClick={() => setActiveSymbol(symbol)} className={`flex justify-between items-center p-3 rounded-lg cursor-pointer transition-all ${isActive ? 'bg-slate-800 border-l-2 border-emerald-500' : 'hover:bg-slate-800/50 border-l-2 border-transparent'}`}>
+                    <div className="flex items-center gap-3">
+                       <div className={`h-8 w-8 rounded-full ${getAvatarColor(char)} flex items-center justify-center text-white font-black shadow-inner`}>{char}</div>
+                       <div><p className={`font-black text-sm ${isActive ? 'text-white' : 'text-slate-300'}`}>{cleanName}</p><p className="text-[10px] text-slate-500 uppercase">USDT</p></div>
                     </div>
-                    
-                    {orderConfirm === symbol ? (
-                       <div className="h-10 w-full bg-emerald-500/20 text-emerald-400 rounded flex items-center justify-center font-bold text-sm gap-2">
-                         <CheckCircle2 className="h-4 w-4" /> Order Queued
-                       </div>
-                    ) : (
-                      <div className="flex gap-2">
-                        <input type="number" placeholder="$ USDT" value={tradeAmounts[symbol] || ''} onChange={(e) => setTradeAmounts({...tradeAmounts, [symbol]: e.target.value})} className="w-1/3 bg-slate-900 border border-slate-700 rounded px-2 text-sm text-white focus:outline-none focus:border-emerald-500" disabled={isOwned}/>
-                        <button onClick={() => executeManualTrade(symbol, "BUY")} disabled={isOwned} className={`flex-1 rounded text-xs font-black tracking-wider transition-all ${isOwned ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-emerald-500 text-slate-950 hover:bg-emerald-400'}`}>BUY</button>
-                        <button onClick={() => executeManualTrade(symbol, "SELL")} disabled={!isOwned} className={`flex-1 rounded text-xs font-black tracking-wider transition-all ${!isOwned ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-rose-500 text-white hover:bg-rose-400'}`}>SELL</button>
-                      </div>
-                    )}
+                    <p className={`font-mono font-medium text-sm ${isActive ? 'text-emerald-400' : 'text-slate-400'}`}>${livePrices[symbol] > 10 ? livePrices[symbol]?.toFixed(2) : livePrices[symbol]?.toFixed(4)}</p>
                   </div>
-                );
+                )
               })}
-            </div>
-          </div>
+           </div>
         </div>
 
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-5">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2"><Wallet className="h-4 w-4 text-blue-500" /> Active Holdings</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {Object.keys(portfolio.positions || {}).length === 0 ? <p className="text-slate-500 text-sm">Awaiting capital deployment...</p> : 
-                Object.entries(portfolio.positions).map(([symbol, data]) => {
-                  const currentPrice = livePrices[symbol];
-                  const pnl = currentPrice ? ((currentPrice - data.entry_price) / data.entry_price * 100) : 0;
-                  const isProfit = pnl >= 0;
-                  
-                  return (
-                    <div key={symbol} className="p-4 bg-slate-950 rounded-lg border border-slate-800 flex justify-between items-center">
-                      <div>
-                        <p className="font-black text-white">{symbol}</p>
-                        <p className="text-xs text-slate-500 font-mono">In: ${data.entry_price?.toFixed(2)}</p>
-                      </div>
-                      <div className="text-right">
-                        <span className={`inline-block px-2 py-1 rounded text-xs font-bold mb-1 ${isProfit ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
-                          {isProfit ? '+' : ''}{pnl.toFixed(2)}%
-                        </span>
-                        <p className="text-xs text-slate-500 font-mono">Vol: {data.amount?.toFixed(4)}</p>
-                      </div>
-                    </div>
-                  );
-                })
-              }
+        <div className="lg:col-span-3 flex flex-col gap-6">
+           <div className="bg-slate-900 rounded-xl border border-slate-800 p-1 h-[450px] shadow-lg">
+             <div className="w-full h-full rounded-lg overflow-hidden">
+                <iframe src={`https://s.tradingview.com/widgetembed/?symbol=BINANCE:${activeSymbol}&interval=15&hidesidetoolbar=1&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=[]&theme=dark&style=1&timezone=Etc%2FUTC`} width="100%" height="100%" frameBorder="0" allowFullScreen></iframe>
+             </div>
+           </div>
+
+           <div className="bg-slate-900 rounded-xl border border-slate-800 p-5 shadow-lg relative">
+              <h3 className="text-sm font-black text-white mb-4 flex items-center gap-2"><Crosshair className="h-5 w-5 text-emerald-500" /> ORDER ENTRY: {activeSymbol.replace('USDT', '')}</h3>
+              <div className="flex flex-col md:flex-row gap-4">
+                 <div className="flex-1 flex gap-4">
+                    <div className="flex-1"><label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Quantity ({activeSymbol.replace('USDT', '')})</label><input type="number" placeholder="0.00" value={orderInput.qty} onChange={(e) => handleOrderInputChange('qty', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 font-mono" /></div>
+                    <div className="flex-1"><label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Margin (USDT)</label><input type="number" placeholder="$0.00" value={orderInput.usdt} onChange={(e) => handleOrderInputChange('usdt', e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 font-mono" /></div>
+                 </div>
+                 <div className="flex-1 flex items-end gap-2">
+                    {orderConfirm ? (
+                       <div className="flex-1 h-[42px] bg-emerald-500/20 text-emerald-400 rounded-lg flex items-center justify-center font-bold text-sm gap-2 border border-emerald-500/30"><CheckCircle2 className="h-4 w-4" /> Order Sent</div>
+                    ) : (
+                      <>
+                        <button onClick={() => executeTrade("BUY")} className="flex-1 h-[42px] rounded-lg text-sm font-black tracking-wider bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-colors shadow-[0_0_15px_rgba(16,185,129,0.3)]">LONG</button>
+                        <button onClick={() => executeTrade("SELL")} className="flex-1 h-[42px] rounded-lg text-sm font-black tracking-wider bg-rose-500 text-white hover:bg-rose-400 transition-colors shadow-[0_0_15px_rgba(244,63,94,0.3)]">SHORT</button>
+                        <button onClick={() => executeTrade("CLOSE")} disabled={!isActiveOwned} className={`px-4 h-[42px] rounded-lg text-xs font-black uppercase tracking-wider transition-colors ${!isActiveOwned ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-slate-800 text-amber-500 border border-amber-500/50 hover:bg-amber-600 hover:text-white'}`}>Liquidate</button>
+                      </>
+                    )}
+                 </div>
+              </div>
+           </div>
+        </div>
+      </div>
+
+      <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-5 mb-6">
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Wallet className="h-4 w-4 text-blue-500" /> Active Holdings Split-Matrix</h3>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
+          
+          <div className="flex flex-col border border-emerald-500/20 rounded-lg bg-slate-950/50 overflow-hidden">
+            {/* NEW: Dynamic Total Profit Badge */}
+            <div className="bg-emerald-500/10 p-3 flex justify-between items-center px-4 text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-emerald-500/20">
+               <span className="flex items-center gap-2"><TrendingUp className="h-3 w-3" /> In Profit ({profitableHoldings.length})</span>
+               <span className="text-xs bg-emerald-500/20 px-2 py-1 rounded shadow-sm">+${totalProfitZoneUsd.toFixed(2)}</span>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar pr-2">
+               {profitableHoldings.length === 0 ? <p className="text-center text-slate-600 text-xs italic mt-10">No positions in profit.</p> : 
+                 profitableHoldings.map((h) => (
+                   <div key={h.symbol} onClick={() => setActiveSymbol(h.lookupSymbol)} className="p-3 bg-slate-900 rounded-lg border border-slate-800 flex justify-between items-center cursor-pointer hover:border-emerald-500/50 transition-all hover:shadow-[0_0_10px_rgba(16,185,129,0.1)] group">
+                     <div className="pl-2">
+                       <p className="font-black text-white flex items-center gap-2">
+                          {h.symbol.replace('/USDT', '')} <span className={`text-[8px] px-1.5 py-0.5 rounded ${h.isLong ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{h.isLong ? 'LONG' : 'SHORT'}</span>
+                       </p>
+                       <p className="text-[11px] text-slate-500 font-mono mt-0.5">In: ${h.data.entry_price?.toFixed(4)}</p>
+                     </div>
+                     <div className="text-right">
+                        <div className="flex items-center justify-end gap-2 mb-1">
+                           <p className="text-[10px] text-slate-500 font-mono group-hover:text-slate-300">Qty: {h.data.amount?.toFixed(4)}</p>
+                           <span className="inline-block px-2 py-0.5 rounded text-[10px] font-black bg-emerald-500/10 text-emerald-400">+{h.pnlPercentage.toFixed(2)}%</span>
+                        </div>
+                        <p className="text-xs font-mono font-black text-emerald-500">+${h.pnlUsd.toFixed(2)}</p>
+                     </div>
+                   </div>
+                 ))
+               }
             </div>
           </div>
 
-          <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-5">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2"><ArrowRightLeft className="h-4 w-4 text-emerald-500" /> Immutable Ledger</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead><tr className="border-b border-slate-800 text-slate-500 text-xs uppercase tracking-wider"><th className="pb-3 font-bold">Timestamp</th><th className="pb-3 font-bold">Asset</th><th className="pb-3 font-bold">Type</th><th className="pb-3 font-bold text-right">Execution Price</th></tr></thead>
-                <tbody className="text-sm">
-                  {trades.length === 0 ? <tr><td colSpan="4" className="text-center py-8 text-slate-600">No executions recorded.</td></tr> : 
-                    trades.map((trade) => {
-                      // Safety format for time
-                      const tradeTime = trade.timestamp ? new Date(trade.timestamp).toLocaleTimeString() : "-";
-                      return (
-                        <tr key={trade.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
-                          <td className="py-3 text-slate-400 font-mono text-xs">{tradeTime}</td>
-                          <td className="py-3 font-bold text-white">{trade.symbol}</td>
-                          <td className="py-3"><span className={`px-2 py-1 rounded text-[10px] font-black tracking-wider uppercase ${trade.action.includes('BUY') ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{trade.action}</span></td>
-                          <td className="py-3 text-right font-mono text-slate-300">${trade.price?.toFixed(2)}</td>
-                        </tr>
-                      )
-                    })
-                  }
-                </tbody>
-              </table>
+          <div className="flex flex-col border border-rose-500/20 rounded-lg bg-slate-950/50 overflow-hidden">
+            {/* NEW: Dynamic Total Drawdown Badge */}
+            <div className="bg-rose-500/10 p-3 flex justify-between items-center px-4 text-[10px] font-bold text-rose-500 uppercase tracking-widest border-b border-rose-500/20">
+               <span className="flex items-center gap-2"><TrendingDown className="h-3 w-3" /> In Drawdown ({losingHoldings.length})</span>
+               <span className="text-xs bg-rose-500/20 px-2 py-1 rounded shadow-sm">-${Math.abs(totalDrawdownZoneUsd).toFixed(2)}</span>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar pr-2">
+               {losingHoldings.length === 0 ? <p className="text-center text-slate-600 text-xs italic mt-10">No positions in drawdown.</p> : 
+                 losingHoldings.map((h) => (
+                   <div key={h.symbol} onClick={() => setActiveSymbol(h.lookupSymbol)} className="p-3 bg-slate-900 rounded-lg border border-slate-800 flex justify-between items-center cursor-pointer hover:border-rose-500/50 transition-all hover:shadow-[0_0_10px_rgba(244,63,94,0.1)] group">
+                     <div className="pl-2">
+                       <p className="font-black text-white flex items-center gap-2">
+                          {h.symbol.replace('/USDT', '')} <span className={`text-[8px] px-1.5 py-0.5 rounded ${h.isLong ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{h.isLong ? 'LONG' : 'SHORT'}</span>
+                       </p>
+                       <p className="text-[11px] text-slate-500 font-mono mt-0.5">In: ${h.data.entry_price?.toFixed(4)}</p>
+                     </div>
+                     <div className="text-right">
+                        <div className="flex items-center justify-end gap-2 mb-1">
+                           <p className="text-[10px] text-slate-500 font-mono group-hover:text-slate-300">Qty: {h.data.amount?.toFixed(4)}</p>
+                           <span className="inline-block px-2 py-0.5 rounded text-[10px] font-black bg-rose-500/10 text-rose-400">{h.pnlPercentage.toFixed(2)}%</span>
+                        </div>
+                        <p className="text-xs font-mono font-black text-rose-500">-${Math.abs(h.pnlUsd).toFixed(2)}</p>
+                     </div>
+                   </div>
+                 ))
+               }
             </div>
           </div>
         </div>
       </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="lg:col-span-1 bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-5 overflow-hidden">
+          <div className="flex justify-between items-center mb-4">
+             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Coins className="h-4 w-4 text-purple-500" /> Accumulated PnL</h3>
+             <div className="bg-slate-950 border border-slate-800 px-2 py-1 rounded text-[10px] font-bold text-slate-300 flex items-center gap-1.5">
+                <Target className="h-3 w-3 text-emerald-500" /> Win Rate: {winRate}%
+             </div>
+          </div>
+          <div className="overflow-y-auto overflow-x-auto max-h-[400px] custom-scrollbar pr-2">
+            <table className="w-full text-left">
+              <thead className="sticky top-0 bg-slate-900/90 backdrop-blur-md z-10">
+                <tr className="border-b border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider">
+                  <th className="pb-3 font-bold">Asset</th>
+                  <th className="pb-3 pr-4 font-bold text-right">Lifetime Profit/Loss</th>
+                </tr>
+              </thead>
+              <tbody className="text-sm">
+                {Object.keys(assetAccumulatedPnL).length === 0 ? <tr><td colSpan="2" className="text-center py-8 text-slate-600 text-xs">No closed trades yet.</td></tr> : 
+                  Object.entries(assetAccumulatedPnL)
+                    .sort(([,a], [,b]) => b - a)
+                    .map(([symbol, profit]) => (
+                    <tr key={symbol} className="border-b border-slate-800/50 hover:bg-slate-800/80 transition-colors">
+                      <td className="py-3 font-bold text-white flex items-center gap-3">
+                        <div className={`h-5 w-5 rounded-full ${getAvatarColor(symbol.charAt(0))} flex items-center justify-center text-[10px] text-white font-black`}>{symbol.charAt(0)}</div>
+                        {symbol.replace('/USDT', '')} <span className="text-[10px] text-slate-500 font-normal">USDT</span>
+                      </td>
+                      <td className={`py-3 pr-4 text-right font-mono font-bold ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-5 overflow-hidden">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><ArrowRightLeft className="h-4 w-4 text-emerald-500" /> Immutable Ledger</h3>
+            <button onClick={exportToCSV} className="flex items-center gap-2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded hover:bg-emerald-500/20 transition-colors border border-emerald-500/20">
+              <Download className="h-3 w-3" /> EXPORT CSV
+            </button>
+          </div>
+          <div className="overflow-y-auto overflow-x-auto max-h-[400px] custom-scrollbar border border-slate-800 rounded-lg">
+            <table className="w-full text-left border-collapse">
+              <thead className="sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10">
+                <tr className="border-b border-slate-700 text-slate-400 text-[10px] uppercase tracking-widest">
+                  <th className="py-3 px-4 font-bold">Time</th>
+                  <th className="py-3 px-4 font-bold">Asset</th>
+                  <th className="py-3 px-4 font-bold text-center">Type</th>
+                  <th className="py-3 px-4 font-bold text-right">Qty</th>
+                  <th className="py-3 px-4 font-bold text-right">Price</th>
+                  <th className="py-3 px-4 font-bold text-right">Realized PnL</th>
+                </tr>
+              </thead>
+              <tbody className="text-sm font-medium">
+                {trades.length === 0 ? <tr><td colSpan="6" className="text-center py-10 text-slate-500 text-xs italic">Awaiting execution data...</td></tr> : 
+                  trades.map((trade) => {
+                    const tradeTime = trade.timestamp ? new Date(trade.timestamp).toLocaleString([], {month:'short', day:'numeric', hour: '2-digit', minute:'2-digit'}) : "-";
+                    const pnl = trade.profit || 0;
+                    const isClose = trade.action.includes('CLOSE');
+                    
+                    let actionColor = 'bg-slate-500/20 text-slate-400';
+                    if (trade.action.includes('LONG')) actionColor = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20';
+                    if (trade.action.includes('SHORT')) actionColor = 'bg-rose-500/20 text-rose-400 border border-rose-500/20';
+                    if (isClose) actionColor = 'bg-amber-500/20 text-amber-400 border border-amber-500/20';
+
+                    return (
+                      <tr key={trade.id} className="border-b border-slate-800/50 hover:bg-slate-800/80 transition-colors group">
+                        <td className="py-3 px-4 text-slate-500 font-mono text-[11px] whitespace-nowrap group-hover:text-slate-300 transition-colors">{tradeTime}</td>
+                        <td className="py-3 px-4 font-bold text-white whitespace-nowrap">
+                           {trade.symbol.replace('/USDT', '')} <span className="text-[10px] text-slate-600 font-normal">USDT</span>
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap text-center">
+                           <span className={`px-2 py-1 rounded text-[9px] font-black tracking-widest uppercase shadow-sm ${actionColor}`}>
+                              {trade.action}
+                           </span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-slate-300 whitespace-nowrap text-xs">{trade.amount?.toFixed(4)}</td>
+                        <td className="py-3 px-4 text-right font-mono text-slate-300 whitespace-nowrap text-xs">${trade.price?.toFixed(4)}</td>
+                        <td className={`py-3 px-4 text-right font-mono font-bold whitespace-nowrap text-xs ${isClose ? (pnl >= 0 ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-600'}`}>
+                           {isClose ? (pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`) : '---'}
+                        </td>
+                      </tr>
+                    )
+                  })
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }
