@@ -121,7 +121,6 @@ export default function App() {
   const totalFeesPaid = portfolio.total_fees_paid || 0;
   const grossPnL = lifetimeRealizedPnL + totalFeesPaid;
   
-  // Percentages relative to the $30k starting bank
   const grossPnLPercent = ((grossPnL / 30000) * 100).toFixed(2);
   const feesPercent = ((totalFeesPaid / 30000) * 100).toFixed(2);
   const netPnLPercent = ((lifetimeRealizedPnL / 30000) * 100).toFixed(2);
@@ -184,7 +183,6 @@ export default function App() {
           <p className="text-base md:text-xl font-black text-white">{Object.keys(portfolio.positions || {}).length} <span className="text-slate-500 text-xs md:text-sm font-normal">/ 30</span></p>
         </div>
         
-        {/* THE FIX: Live PnL now includes % */}
         <div className="bg-slate-900 p-3 md:p-4 rounded-xl border border-slate-800 shadow-lg relative overflow-hidden">
           <div className={`absolute top-0 right-0 w-1 h-full ${totalLiveProfitUsd >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
           <div className="flex items-center gap-2 mb-1"><BarChart3 className={`h-3 w-3 md:h-4 md:w-4 ${totalLiveProfitUsd >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} /><h2 className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Live PnL</h2></div>
@@ -198,7 +196,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* THE FIX: Lifetime PnL now includes % */}
         <div className="relative">
           <div 
             className="bg-slate-900 p-3 md:p-4 rounded-xl border border-slate-800 shadow-lg h-full cursor-pointer hover:bg-slate-800/50 transition-colors"
@@ -218,7 +215,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Floating Z-Index Dropdown */}
           {showFees && (
             <div className="absolute top-full right-0 md:left-0 mt-2 w-[280px] bg-slate-800/95 backdrop-blur-md border border-slate-600 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.7)] z-50 p-4 animate-in fade-in slide-in-from-top-2">
                <div className="flex justify-between items-center mb-3">
@@ -303,7 +299,6 @@ export default function App() {
         <h3 className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 md:mb-4 flex items-center gap-2"><Wallet className="h-3 w-3 md:h-4 md:w-4 text-blue-500" /> Active Holdings Split-Matrix</h3>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-          
           <div className="flex flex-col border border-emerald-500/20 rounded-lg bg-slate-950/50 overflow-hidden h-[250px] md:h-[350px]">
             <div className="bg-emerald-500/10 p-2 md:p-3 flex justify-between items-center px-3 md:px-4 text-[9px] md:text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-emerald-500/20">
                <span className="flex items-center gap-1 md:gap-2"><TrendingUp className="h-3 w-3" /> In Profit ({profitableHoldings.length})</span>
@@ -360,6 +355,101 @@ export default function App() {
                  ))
                }
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* LOWER SECTION: ACCUMULATED PNL & IMMUTABLE LEDGER */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-4 md:mb-6">
+        <div className="lg:col-span-1 bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-3 md:p-5 overflow-hidden">
+          <div className="flex justify-between items-center mb-3 md:mb-4">
+             <h3 className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Coins className="h-3 w-3 md:h-4 md:w-4 text-purple-500" /> Accumulated PnL</h3>
+             <div className="bg-slate-950 border border-slate-800 px-1.5 md:px-2 py-0.5 md:py-1 rounded text-[9px] md:text-[10px] font-bold text-slate-300 flex items-center gap-1 md:gap-1.5">
+                <Target className="h-2.5 w-2.5 md:h-3 md:w-3 text-emerald-500" /> Win Rate: {winRate}%
+             </div>
+          </div>
+          <div className="overflow-y-auto overflow-x-auto h-[250px] md:h-[400px] custom-scrollbar pr-1 md:pr-2">
+            <table className="w-full text-left">
+              <thead className="sticky top-0 bg-slate-900/90 backdrop-blur-md z-10">
+                <tr className="border-b border-slate-800 text-slate-500 text-[9px] md:text-[10px] uppercase tracking-wider">
+                  <th className="pb-2 md:pb-3 font-bold">Asset</th>
+                  <th className="pb-2 md:pb-3 pr-2 md:pr-4 font-bold text-right">Lifetime Profit/Loss</th>
+                </tr>
+              </thead>
+              <tbody className="text-xs md:text-sm">
+                {Object.keys(assetAccumulatedPnL).length === 0 ? <tr><td colSpan="2" className="text-center py-6 md:py-8 text-slate-600 text-[10px] md:text-xs">No closed trades yet.</td></tr> : 
+                  Object.entries(assetAccumulatedPnL)
+                    .sort(([,a], [,b]) => b - a)
+                    .map(([symbol, profit]) => (
+                    <tr key={symbol} className="border-b border-slate-800/50 hover:bg-slate-800/80 transition-colors">
+                      <td className="py-2 md:py-3 font-bold text-white flex items-center gap-2 md:gap-3">
+                        <div className={`h-4 w-4 md:h-5 md:w-5 rounded-full ${getAvatarColor(symbol.charAt(0))} flex items-center justify-center text-[8px] md:text-[10px] text-white font-black`}>{symbol.charAt(0)}</div>
+                        {symbol.replace('/USDT', '')} <span className="text-[8px] md:text-[10px] text-slate-500 font-normal">USDT</span>
+                      </td>
+                      <td className={`py-2 md:py-3 pr-2 md:pr-4 text-right font-mono font-bold ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-3 md:p-5 overflow-hidden">
+          <div className="flex justify-between items-center mb-3 md:mb-4">
+            <h3 className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><ArrowRightLeft className="h-3 w-3 md:h-4 md:w-4 text-emerald-500" /> Immutable Ledger</h3>
+            <button onClick={exportToCSV} className="flex items-center gap-1 md:gap-2 text-[9px] md:text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 md:px-3 py-1 md:py-1.5 rounded hover:bg-emerald-500/20 transition-colors border border-emerald-500/20">
+              <Download className="h-2.5 w-2.5 md:h-3 md:w-3" /> EXPORT
+            </button>
+          </div>
+          <div className="overflow-y-auto overflow-x-auto h-[250px] md:h-[400px] custom-scrollbar border border-slate-800 rounded-lg">
+            <table className="w-full text-left border-collapse min-w-[500px]">
+              <thead className="sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10">
+                <tr className="border-b border-slate-700 text-slate-400 text-[9px] md:text-[10px] uppercase tracking-widest">
+                  <th className="py-2 md:py-3 px-3 md:px-4 font-bold">Time</th>
+                  <th className="py-2 md:py-3 px-3 md:px-4 font-bold">Asset</th>
+                  <th className="py-2 md:py-3 px-3 md:px-4 font-bold text-center">Type</th>
+                  <th className="py-2 md:py-3 px-3 md:px-4 font-bold text-right">Qty</th>
+                  <th className="py-2 md:py-3 px-3 md:px-4 font-bold text-right">Price</th>
+                  <th className="py-2 md:py-3 px-3 md:px-4 font-bold text-right">Realized PnL</th>
+                </tr>
+              </thead>
+              <tbody className="text-xs md:text-sm font-medium">
+                {trades.length === 0 ? <tr><td colSpan="6" className="text-center py-8 md:py-10 text-slate-500 text-[10px] md:text-xs italic">Awaiting execution data...</td></tr> : 
+                  trades.map((trade) => {
+                    const tradeTime = trade.timestamp ? new Date(trade.timestamp).toLocaleString([], {month:'short', day:'numeric', hour: '2-digit', minute:'2-digit'}) : "-";
+                    const pnl = trade.profit || 0;
+                    const isClose = trade.action.includes('CLOSE');
+                    
+                    let actionColor = 'bg-slate-500/20 text-slate-400';
+                    if (trade.action.includes('LONG')) actionColor = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20';
+                    if (trade.action.includes('SHORT')) actionColor = 'bg-rose-500/20 text-rose-400 border border-rose-500/20';
+                    if (isClose) actionColor = 'bg-amber-500/20 text-amber-400 border border-amber-500/20';
+
+                    return (
+                      <tr key={trade.id} className="border-b border-slate-800/50 hover:bg-slate-800/80 transition-colors group">
+                        <td className="py-2 md:py-3 px-3 md:px-4 text-slate-500 font-mono text-[9px] md:text-[11px] whitespace-nowrap group-hover:text-slate-300 transition-colors">{tradeTime}</td>
+                        <td className="py-2 md:py-3 px-3 md:px-4 font-bold text-white whitespace-nowrap">
+                           {trade.symbol.replace('/USDT', '')} <span className="text-[8px] md:text-[10px] text-slate-600 font-normal">USDT</span>
+                        </td>
+                        <td className="py-2 md:py-3 px-3 md:px-4 whitespace-nowrap text-center">
+                           <span className={`px-1.5 md:px-2 py-0.5 md:py-1 rounded text-[8px] md:text-[9px] font-black tracking-widest uppercase shadow-sm ${actionColor}`}>
+                              {trade.action}
+                           </span>
+                        </td>
+                        <td className="py-2 md:py-3 px-3 md:px-4 text-right font-mono text-slate-300 whitespace-nowrap text-[10px] md:text-xs">{trade.amount?.toFixed(4)}</td>
+                        <td className="py-2 md:py-3 px-3 md:px-4 text-right font-mono text-slate-300 whitespace-nowrap text-[10px] md:text-xs">${trade.price?.toFixed(4)}</td>
+                        <td className={`py-2 md:py-3 px-3 md:px-4 text-right font-mono font-bold whitespace-nowrap text-[10px] md:text-xs ${isClose ? (pnl >= 0 ? 'text-emerald-400' : 'text-rose-400') : 'text-slate-600'}`}>
+                           {isClose ? (pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`) : '---'}
+                        </td>
+                      </tr>
+                    )
+                  })
+                }
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
