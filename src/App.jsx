@@ -8,7 +8,7 @@ const OG_COINS = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSD
 const VOLATILE_COINS = ["PEPEUSDT", "WIFUSDT", "FLOKIUSDT", "BONKUSDT", "SHIBUSDT", "AVAXUSDT", "NEARUSDT", "RNDRUSDT", "FETUSDT", "INJUSDT", "OPUSDT", "ARBUSDT", "SUIUSDT", "APTUSDT", "SEIUSDT", "TIAUSDT", "JUPUSDT", "ORDIUSDT", "RUNEUSDT", "BOMEUSDT"];
 
 export default function App() {
-  const [portfolio, setPortfolio] = useState({ cash_balance: 0, total_value: 0, positions: {} });
+  const [portfolio, setPortfolio] = useState({ cash_balance: 0, total_value: 0, positions: {}, total_fees_paid: 0 });
   const [trades, setTrades] = useState([]);
   const [livePrices, setLivePrices] = useState({});
   const [loading, setLoading] = useState(true);
@@ -17,6 +17,9 @@ export default function App() {
   const [activeSymbol, setActiveSymbol] = useState("BTCUSDT");
   const [orderInput, setOrderInput] = useState({ usdt: '', qty: '' });
   const [orderConfirm, setOrderConfirm] = useState(false);
+  
+  // NEW: State to toggle the Lifetime PnL card breakdown
+  const [showFees, setShowFees] = useState(false);
 
   useEffect(() => {
     const unsubPortfolio = onSnapshot(doc(db, "bot_stats", "live_portfolio"), (doc) => {
@@ -111,12 +114,14 @@ export default function App() {
   const profitableHoldings = activeHoldingsData.filter(h => h.pnlUsd >= 0).sort((a, b) => b.pnlUsd - a.pnlUsd);
   const losingHoldings = activeHoldingsData.filter(h => h.pnlUsd < 0).sort((a, b) => a.pnlUsd - b.pnlUsd);
   
-  // --- NEW AGGREGATE CALCULATIONS ---
   const totalProfitZoneUsd = profitableHoldings.reduce((sum, h) => sum + h.pnlUsd, 0);
   const totalDrawdownZoneUsd = losingHoldings.reduce((sum, h) => sum + h.pnlUsd, 0);
 
+  // --- NEW $30K MATH & BIFURCATION LOGIC ---
   const realTimeTotalValue = (portfolio.cash_balance || 0) + totalMarginUsed + totalLiveProfitUsd;
-  const lifetimeRealizedPnL = realTimeTotalValue - 3000.0;
+  const lifetimeRealizedPnL = realTimeTotalValue - 30000.0;
+  const totalFeesPaid = portfolio.total_fees_paid || 0;
+  const grossPnL = lifetimeRealizedPnL + totalFeesPaid;
   
   const assetAccumulatedPnL = {};
   trades.forEach(trade => {
@@ -171,6 +176,7 @@ export default function App() {
           <div className="flex items-center gap-2 mb-1"><ShieldAlert className="h-4 w-4 text-amber-500" /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Positions</h2></div>
           <p className="text-lg md:text-xl font-black text-white">{Object.keys(portfolio.positions || {}).length} <span className="text-slate-500 text-sm font-normal">/ 30</span></p>
         </div>
+        
         <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg relative overflow-hidden">
           <div className={`absolute top-0 right-0 w-1 h-full ${totalLiveProfitUsd >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
           <div className="flex items-center gap-2 mb-1"><BarChart3 className={`h-4 w-4 ${totalLiveProfitUsd >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Live PnL</h2></div>
@@ -178,15 +184,43 @@ export default function App() {
             {totalLiveProfitUsd >= 0 ? '+' : ''}${totalLiveProfitUsd.toFixed(2)}
           </p>
         </div>
-        <div className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg relative overflow-hidden">
+
+        {/* THE FIX: Interactive Bifurcated Lifetime PnL Card */}
+        <div 
+          className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-lg relative overflow-hidden cursor-pointer hover:bg-slate-800/50 transition-colors"
+          onClick={() => setShowFees(!showFees)}
+        >
           <div className={`absolute top-0 right-0 w-1 h-full ${lifetimeRealizedPnL >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
-          <div className="flex items-center gap-2 mb-1"><Layers className={`h-4 w-4 ${lifetimeRealizedPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lifetime PnL</h2></div>
-          <p className={`text-lg md:text-xl font-black ${lifetimeRealizedPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {lifetimeRealizedPnL >= 0 ? '+' : ''}${lifetimeRealizedPnL.toFixed(2)}
-          </p>
+          <div className="flex justify-between items-start mb-1">
+             <div className="flex items-center gap-2"><Layers className={`h-4 w-4 ${lifetimeRealizedPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} /><h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lifetime PnL</h2></div>
+             <span className="text-[8px] text-slate-500 uppercase bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">Tap to Expand</span>
+          </div>
+          
+          {!showFees ? (
+             <p className={`text-lg md:text-xl font-black ${lifetimeRealizedPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+               {lifetimeRealizedPnL >= 0 ? '+' : ''}${lifetimeRealizedPnL.toFixed(2)}
+             </p>
+          ) : (
+             <div className="flex flex-col mt-1.5 gap-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="flex justify-between items-center text-[11px]">
+                   <span className="text-slate-400 font-medium tracking-wide">Gross Return:</span>
+                   <span className={`font-mono font-bold ${grossPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{grossPnL >= 0 ? '+' : ''}${grossPnL.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                   <span className="text-slate-400 font-medium tracking-wide">Exchange Fees:</span>
+                   <span className="font-mono font-bold text-rose-500">-${totalFeesPaid.toFixed(2)}</span>
+                </div>
+                <div className="w-full h-px bg-slate-800 my-0.5"></div>
+                <div className="flex justify-between items-center text-xs">
+                   <span className="text-slate-200 font-bold tracking-wide">Net Profit:</span>
+                   <span className={`font-mono font-black ${lifetimeRealizedPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{lifetimeRealizedPnL >= 0 ? '+' : ''}${lifetimeRealizedPnL.toFixed(2)}</span>
+                </div>
+             </div>
+          )}
         </div>
       </div>
 
+      {/* Rest of the UI remains functionally the same, just rendering the smart padding */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
         <div className="lg:col-span-1 bg-slate-900 rounded-xl border border-slate-800 flex flex-col h-[600px] shadow-lg overflow-hidden">
            <div className="p-3 border-b border-slate-800">
@@ -251,16 +285,12 @@ export default function App() {
 
       <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-5 mb-6">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Wallet className="h-4 w-4 text-blue-500" /> Active Holdings Split-Matrix</h3>
-        
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
-          
           <div className="flex flex-col border border-emerald-500/20 rounded-lg bg-slate-950/50 overflow-hidden">
-            {/* NEW: Dynamic Total Profit Badge */}
             <div className="bg-emerald-500/10 p-3 flex justify-between items-center px-4 text-[10px] font-bold text-emerald-500 uppercase tracking-widest border-b border-emerald-500/20">
                <span className="flex items-center gap-2"><TrendingUp className="h-3 w-3" /> In Profit ({profitableHoldings.length})</span>
                <span className="text-xs bg-emerald-500/20 px-2 py-1 rounded shadow-sm">+${totalProfitZoneUsd.toFixed(2)}</span>
             </div>
-            
             <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar pr-2">
                {profitableHoldings.length === 0 ? <p className="text-center text-slate-600 text-xs italic mt-10">No positions in profit.</p> : 
                  profitableHoldings.map((h) => (
@@ -285,12 +315,10 @@ export default function App() {
           </div>
 
           <div className="flex flex-col border border-rose-500/20 rounded-lg bg-slate-950/50 overflow-hidden">
-            {/* NEW: Dynamic Total Drawdown Badge */}
             <div className="bg-rose-500/10 p-3 flex justify-between items-center px-4 text-[10px] font-bold text-rose-500 uppercase tracking-widest border-b border-rose-500/20">
                <span className="flex items-center gap-2"><TrendingDown className="h-3 w-3" /> In Drawdown ({losingHoldings.length})</span>
                <span className="text-xs bg-rose-500/20 px-2 py-1 rounded shadow-sm">-${Math.abs(totalDrawdownZoneUsd).toFixed(2)}</span>
             </div>
-            
             <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar pr-2">
                {losingHoldings.length === 0 ? <p className="text-center text-slate-600 text-xs italic mt-10">No positions in drawdown.</p> : 
                  losingHoldings.map((h) => (
