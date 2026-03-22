@@ -4,3 +4,33 @@ body {
   background-color: #0f172a; /* Sleek dark crypto theme */
   color: white;
 }
+/* Custom Scrollbar Styling */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #334155; /* Slate-700 */
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #475569; /* Slate-600 */
+}
+
+/* Ensure body doesn't have an ugly scrollbar either */
+body::-webkit-scrollbar {
+  width: 8px;
+}
+body::-webkit-scrollbar-track {
+  background: #020617; /* Slate-950 */
+}
+body::-webkit-scrollbar-thumb {
+  background-color: #1e293b; /* Slate-800 */
+  border-radius: 4px;
+}
