@@ -18,7 +18,6 @@ export default function App() {
   const [orderInput, setOrderInput] = useState({ usdt: '', qty: '' });
   const [orderConfirm, setOrderConfirm] = useState(false);
   
-  // Floating Popover State
   const [showFees, setShowFees] = useState(false);
 
   useEffect(() => {
@@ -126,6 +125,7 @@ export default function App() {
   const grossPnLPercent = ((grossPnL / 30000) * 100).toFixed(2);
   const feesPercent = ((totalFeesPaid / 30000) * 100).toFixed(2);
   const netPnLPercent = ((lifetimeRealizedPnL / 30000) * 100).toFixed(2);
+  const livePnLAccountPercent = ((totalLiveProfitUsd / 30000) * 100).toFixed(2);
 
   const assetAccumulatedPnL = {};
   trades.forEach(trade => {
@@ -184,15 +184,21 @@ export default function App() {
           <p className="text-base md:text-xl font-black text-white">{Object.keys(portfolio.positions || {}).length} <span className="text-slate-500 text-xs md:text-sm font-normal">/ 30</span></p>
         </div>
         
+        {/* THE FIX: Live PnL now includes % */}
         <div className="bg-slate-900 p-3 md:p-4 rounded-xl border border-slate-800 shadow-lg relative overflow-hidden">
           <div className={`absolute top-0 right-0 w-1 h-full ${totalLiveProfitUsd >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
           <div className="flex items-center gap-2 mb-1"><BarChart3 className={`h-3 w-3 md:h-4 md:w-4 ${totalLiveProfitUsd >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} /><h2 className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Live PnL</h2></div>
-          <p className={`text-base md:text-xl font-black ${totalLiveProfitUsd >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {totalLiveProfitUsd >= 0 ? '+' : ''}${totalLiveProfitUsd.toFixed(2)}
-          </p>
+          <div className="flex items-baseline gap-1.5 md:gap-2">
+            <p className={`text-base md:text-xl font-black ${totalLiveProfitUsd >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {totalLiveProfitUsd >= 0 ? '+' : ''}${totalLiveProfitUsd.toFixed(2)}
+            </p>
+            <span className={`text-[10px] md:text-xs font-bold ${totalLiveProfitUsd >= 0 ? 'text-emerald-500/70' : 'text-rose-500/70'}`}>
+              ({totalLiveProfitUsd >= 0 ? '+' : ''}{livePnLAccountPercent}%)
+            </span>
+          </div>
         </div>
 
-        {/* THE FIX: Floating Absolute Pop-over for Lifetime PnL */}
+        {/* THE FIX: Lifetime PnL now includes % */}
         <div className="relative">
           <div 
             className="bg-slate-900 p-3 md:p-4 rounded-xl border border-slate-800 shadow-lg h-full cursor-pointer hover:bg-slate-800/50 transition-colors"
@@ -202,9 +208,14 @@ export default function App() {
             <div className="flex justify-between items-start mb-1">
                <div className="flex items-center gap-2"><Layers className={`h-3 w-3 md:h-4 md:w-4 ${lifetimeRealizedPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} /><h2 className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">Lifetime PnL</h2></div>
             </div>
-            <p className={`text-base md:text-xl font-black ${lifetimeRealizedPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-               {lifetimeRealizedPnL >= 0 ? '+' : ''}${lifetimeRealizedPnL.toFixed(2)}
-            </p>
+            <div className="flex items-baseline gap-1.5 md:gap-2">
+              <p className={`text-base md:text-xl font-black ${lifetimeRealizedPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                 {lifetimeRealizedPnL >= 0 ? '+' : ''}${lifetimeRealizedPnL.toFixed(2)}
+              </p>
+              <span className={`text-[10px] md:text-xs font-bold ${lifetimeRealizedPnL >= 0 ? 'text-emerald-500/70' : 'text-rose-500/70'}`}>
+                 ({lifetimeRealizedPnL >= 0 ? '+' : ''}{netPnLPercent}%)
+              </span>
+            </div>
           </div>
 
           {/* Floating Z-Index Dropdown */}
@@ -287,7 +298,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* FULL WIDTH SPLIT MATRIX FOR ACTIVE HOLDINGS (Mobile Height Fixes) */}
+      {/* FULL WIDTH SPLIT MATRIX FOR ACTIVE HOLDINGS */}
       <div className="bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-3 md:p-5 mb-4 md:mb-6">
         <h3 className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 md:mb-4 flex items-center gap-2"><Wallet className="h-3 w-3 md:h-4 md:w-4 text-blue-500" /> Active Holdings Split-Matrix</h3>
         
